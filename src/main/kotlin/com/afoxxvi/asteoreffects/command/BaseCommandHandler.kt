@@ -12,7 +12,6 @@ abstract class BaseCommandHandler : CommandExecutor, TabCompleter {
     protected val commands: MutableList<BaseCommand> = ArrayList()
     override fun onCommand(commandSender: CommandSender, command: Command, s: String, strings: Array<String>): Boolean {
         if (strings.isEmpty()) {
-            commandSender.sendMessage("help")
             return true
         }
         commands.firstOrNull { it.command.equals(strings[0], ignoreCase = true) }?.let {

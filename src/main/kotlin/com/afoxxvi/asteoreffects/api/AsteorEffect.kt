@@ -15,7 +15,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-@Suppress("MemberVisibilityCanBePrivate")
+@Suppress("MemberVisibilityCanBePrivate", "unused")
 class AsteorEffect private constructor(var particle: Particle, var location: Location) {
     //particle parameters
     private var count: Int = 1
@@ -38,6 +38,19 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
 
     init {
         require(location.world != null) { "Location world can not be null" }
+        location = location.clone()
+    }
+
+    fun copy(): AsteorEffect = AsteorEffect(particle, location.clone()).also {
+        it.count = count
+        it.offsetX = offsetX
+        it.offsetY = offsetY
+        it.offsetZ = offsetZ
+        it.extra = extra
+        it.data = data
+        it.direction = direction
+        it.rotateAxis = rotateAxis
+        it.rotateAngle = rotateAngle
     }
 
     fun count(count: Int) = this.also {
@@ -154,15 +167,31 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
         location.world.spawnParticle(particle, location, count, offsetX, offsetY, offsetZ, extra, data)
     }
 
-    fun drawCircle(radius: Double, points: Int) {
+    fun drawCircle(radius: Double, points: Int, initialAngle: Double = 0.0) {
         val angle = 2 * Math.PI / points
-        var currentAngle = 0.0
+        var currentAngle = initialAngle
         for (i in 0 until points) {
             val x = radius * cos(currentAngle)
             val z = radius * sin(currentAngle)
             val vector = Vector(x, 0.0, z)
             drawRotated(vector)
             currentAngle += angle
+        }
+    }
+
+    fun animateCircle(radius: Double, radiusIncrease: Double, points: Int, times: Long, interval: Long, initialAngle: Double = 0.0) {
+        var currentRadius = radius
+        asyncRepeat(times, interval) {
+            currentRadius += radiusIncrease
+            drawCircle(currentRadius, points, initialAngle)
+        }
+    }
+
+    fun animateRing(radius: Double, points: Int, times: Long, interval: Long, angleIncrease: Double) {
+        var currentAngle = 0.0
+        asyncRepeat(times, interval) {
+            drawCircle(radius, points, currentAngle)
+            currentAngle += angleIncrease
         }
     }
 
@@ -174,6 +203,24 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
         }
     }
 
+    fun animateLine(to: Vector, points: Int, times: Long, interval: Long, startInclusive: Boolean = true, endInclusive: Boolean = true) {
+        val start = if (startInclusive) 0 else 1
+        val end = if (endInclusive) points else points - 1
+        var current = start
+        var step = 0
+        var target: Int
+        asyncRepeat(times, interval) {
+            step++
+            target = (start + (end - start) * step / times).toInt()
+            while (current < target) {
+                val ratio = current.toDouble() / points
+                val offset = Vector(to.x * ratio, to.y * ratio, to.z * ratio)
+                drawRotated(offset)
+                current++
+            }
+        }
+    }
+
     fun drawPolygon(radius: Double, edges: Int, pointsPerEdge: Int, initialAngle: Double = 0.0) {
         val angle = 2 * Math.PI / edges
         var currentAngle = initialAngle
@@ -182,8 +229,27 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
             currentAngle += angle
             val end = Vector(radius * cos(currentAngle), 0.0, radius * sin(currentAngle)).subtract(start)
             location.add(start)
-            drawLine(end, pointsPerEdge + 1)
+            drawLine(end, pointsPerEdge + 1, false)
             location.subtract(start)
+        }
+    }
+
+    fun animatePolygon(
+        radius: Double,
+        radiusIncrease: Double,
+        edges: Int,
+        pointsPerEdge: Int,
+        times: Long,
+        interval: Long,
+        angle: Double = 0.0,
+        angleIncrease: Double = 0.0,
+    ) {
+        var currentRadius = radius
+        var currentAngle = angle
+        asyncRepeat(times, interval) {
+            currentRadius += radiusIncrease
+            currentAngle += angleIncrease
+            drawPolygon(currentRadius, edges, pointsPerEdge, currentAngle)
         }
     }
 
@@ -207,9 +273,31 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
         }
     }
 
+    fun animateStar(
+        outerRadius: Double,
+        outerRadiusIncrease: Double,
+        innerRadius: Double,
+        innerRadiusIncrease: Double,
+        edges: Int,
+        pointsPerEdge: Int,
+        times: Long,
+        interval: Long,
+        angle: Double = 0.0,
+        angleIncrease: Double = 0.0
+    ) {
+        var currentOuterRadius = outerRadius
+        var currentInnerRadius = innerRadius
+        var currentAngle = angle
+        asyncRepeat(times, interval) {
+            currentOuterRadius += outerRadiusIncrease
+            currentInnerRadius += innerRadiusIncrease
+            currentAngle += angleIncrease
+            drawStar(currentOuterRadius, currentInnerRadius, edges, pointsPerEdge, currentAngle)
+        }
+    }
+
     fun drawSphere(radius: Double, points: Int, surfaceRate: Double = 1.0) {
         for (i in 0 until points) {
-            //a random point on the surface of the sphere
             val theta = Random.nextDouble() * 2 * Math.PI
             val phi = Random.nextDouble() * Math.PI - Math.PI / 2
             val x = radius * cos(theta) * cos(phi)
@@ -220,6 +308,18 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
                 vector.multiply(Random.nextDouble())
             }
             draw(vector)
+        }
+    }
+
+    fun animateSphere(
+        radius: Double, radiusIncrease: Double, points: Int, pointsIncrease: Int, times: Long, interval: Long, surfaceRate: Double = 1.0
+    ) {
+        var currentRadius = radius
+        var currentPoints = points
+        asyncRepeat(times, interval) {
+            currentRadius += radiusIncrease
+            currentPoints += pointsIncrease
+            drawSphere(currentRadius, points, surfaceRate)
         }
     }
 
@@ -241,11 +341,65 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
                 drawRotated(vector)
                 currentAngle += da
             }
-            currentAngle += curve
+            currentAngle += curve / points
         }
     }
 
-    fun drawPartLine(b: Vector, c: Vector, points: Int, i: Int, j: Int) {
+    fun animateVortex(
+        radius: Double, height: Double, points: Int, curve: Double, lines: Int, times: Long, interval: Long
+    ) = animateVortex(0.0, radius / points, 0.0, height / points, points, curve, lines, times, interval)
+
+    fun animateVortex(
+        radiusFromTo: Pair<Double, Double>,
+        heightFromTo: Pair<Double, Double>,
+        points: Int,
+        curve: Double,
+        lines: Int,
+        times: Long,
+        interval: Long
+    ) = animateVortex(
+        radiusFromTo.first,
+        (radiusFromTo.second - radiusFromTo.first) / points,
+        heightFromTo.first,
+        (heightFromTo.second - heightFromTo.first) / points,
+        points,
+        curve,
+        lines,
+        times,
+        interval
+    )
+
+    fun animateVortex(
+        initRadius: Double,
+        radiusIncrease: Double,
+        initHeight: Double,
+        heightIncrease: Double,
+        points: Int,
+        curve: Double,
+        lines: Int,
+        times: Long,
+        interval: Long
+    ) {
+        var current = 0
+        var step = 0
+        var target: Int
+        var currentRadius = initRadius
+        var currentHeight = initHeight
+        var currentAngle = 0.0
+        asyncRepeat(times, interval) {
+            step++
+            target = (points * step / times).toInt()
+            while (current < target) {
+                drawCircle(currentRadius, lines, currentAngle)
+                currentRadius += radiusIncrease
+                currentHeight += heightIncrease
+                currentAngle += curve / points
+                current++
+            }
+        }
+    }
+
+    fun drawLinePart(b: Vector, c: Vector, points: Int, i: Int, j: Int) {
         val vector = Vector(
             b.x * i.toDouble() / points + c.x * j.toDouble() / points,
             b.y * i.toDouble() / points + c.y * j.toDouble() / points,
@@ -257,7 +411,23 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
     fun drawTriangle(b: Vector, c: Vector, points: Int) {
         for (total in 0..points) {
             for (i in 0..total) {
-                drawPartLine(b, c, points, i, total - i)
+                drawLinePart(b, c, points, i, total - i)
+            }
+        }
+    }
+
+    fun animateTriangle(b: Vector, c: Vector, points: Int, times: Long, interval: Long) {
+        var current = 0
+        var step = 0
+        var target: Int
+        asyncRepeat(times, interval) {
+            step++
+            target = (points * step / times).toInt()
+            while (current < target) {
+                for (i in 0..current) {
+                    drawLinePart(b, c, points, i, current - i)
+                }
+                current++
             }
         }
     }
@@ -265,7 +435,23 @@ class AsteorEffect private constructor(var particle: Particle, var location: Loc
     fun drawParallelogram(b: Vector, c: Vector, points: Int) {
         for (total in 0 until points * 2) {
             for (i in (total - points).coerceAtLeast(0)..total.coerceAtMost(points)) {
-                drawPartLine(b, c, points, i, total - i)
+                drawLinePart(b, c, points, i, total - i)
+            }
+        }
+    }
+
+    fun animateParallelogram(b: Vector, c: Vector, points: Int, times: Long, interval: Long) {
+        var current = 0
+        var step = 0
+        var target: Int
+        asyncRepeat(times, interval) {
+            step++
+            target = (2 * points * step / times).toInt()
+            while (current < target) {
+                for (i in (current - points).coerceAtLeast(0)..current.coerceAtMost(points)) {
+                    drawLinePart(b, c, points, i, current - i)
+                }
+                current++
             }
         }
     }
