@@ -6,7 +6,7 @@ commands:
   asteoreffects:
     description: AsteorEffects command
     usage: /asteoreffects
-    aliases: [ ae ]
+    aliases: [ asteffects, aeffect ]
 permissions:
   asteoreffects.use:
     description: Allows the player to use AsteorEffects
